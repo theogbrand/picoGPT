@@ -21,8 +21,44 @@ def linear(x, w, b):  # [m, in], [in, out], [out] -> [m, out]
     return x @ w + b  # matrix multiply and add bias
 
 
+def ffn(x, c_fc, c_proj):
+    # project up dims -> "squashing function" like ReLu
+    a = gelu(linear(x, **c_fc))  # [n_seq, n_embd] -> [n_seq, 4*n_embd]
+
+    # project back down
+    x = linear(a, **c_proj)  # [n_seq, 4*n_embd] -> [n_seq, n_embd]
+
+    return x
+
+
+def attention(q, k, v): # [n_q, d_k], [n_k, d_k], [n_k, d_v] -> [n_q, d_v]
+    return softmax(q @ k.T / np.sqrt(q.shape[-1])) @ v
+
+
+def self_attention(x, c_attn, c_proj):
+    x = linear(x, **c_attn) # q,k,v projections in single matrice for parallel compute, these are "attn_wts"
+
+    (q, k, v) = np.split(x, 3, axis=-1) # [n_seq, 3*n_embd] -> [n_seq, n_embd]
+
+    # learn self-attn
+    x = attention(q, k, v)
+
+    # out proj
+    x = linear(x, **c_proj)  # [n_seq, n_embd] -> [n_seq, n_embd]
+
+    return x
+
+
+def mha(x, c_attn, n_head):
+    pass
+
+
 def transformer_block(x, mlp, attn, ln_1, ln_2, n_head):
-    
+    # multi-head causal self attention
+    x = x + mha(layer_norm(x, **ln_1), **attn, n_head=n_head) # [n_seq, n_embd]
+
+    # position-wise feed forward network
+    x = x + ffn(layer_norm(x, **ln_2), **mlp)  # [n_seq, n_embd] -> [n_seq, n_embd]
     return x
 
 
