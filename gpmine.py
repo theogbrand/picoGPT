@@ -31,17 +31,19 @@ def ffn(x, c_fc, c_proj):
     return x
 
 
-def attention(q, k, v): # [n_q, d_k], [n_k, d_k], [n_k, d_v] -> [n_q, d_v]
-    return softmax(q @ k.T / np.sqrt(q.shape[-1])) @ v
+def attention(q, k, v, mask): # [n_q, d_k], [n_k, d_k], [n_k, d_v] -> [n_q, d_v]
+    return softmax(q @ k.T / np.sqrt(q.shape[-1]) + mask) @ v
 
 
-def self_attention(x, c_attn, c_proj):
+def casual_self_attention(x, c_attn, c_proj):
     x = linear(x, **c_attn) # q,k,v projections in single matrice for parallel compute, these are "attn_wts"
 
     (q, k, v) = np.split(x, 3, axis=-1) # [n_seq, 3*n_embd] -> [n_seq, n_embd]
 
+    casaul_mask = (1 - np.tri(x.shape[0], dtype=x.dtype)) * -1e10
+
     # learn self-attn
-    x = attention(q, k, v)
+    x = attention(q, k, v, casaul_mask)
 
     # out proj
     x = linear(x, **c_proj)  # [n_seq, n_embd] -> [n_seq, n_embd]
