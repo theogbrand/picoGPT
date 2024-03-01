@@ -21,8 +21,23 @@ def linear(x, w, b):  # [m, in], [in, out], [out] -> [m, out]
     return x @ w + b  # matrix multiply and add bias
 
 
-def gpt2(inputs, wte, wpe, blocks, ln_f, n_head):
-    pass # TODO: implement this
+def transformer_block(x, mlp, attn, ln_1, ln_2, n_head):
+    
+    return x
+
+
+def gpt2(inputs, wte, wpe, blocks, ln_f, n_head):  # [n_seq] -> [n_seq, n_vocab]
+    # token + positional embeddings
+    x = wte[inputs] + wpe[range(len(inputs))]  # [n_seq] -> [n_seq, n_embd]
+    # wte is now embeddings instead of tokens, add with wpe, which is a number from 0 to len(inputs) repr relative positions
+
+    # forward pass through n_layer transformer blocks
+    for block in blocks:
+        x = transformer_block(x, **block, n_head=n_head)  # [n_seq, n_embd] -> [n_seq, n_embd]
+
+    # projection to vocab
+    x = layer_norm(x, **ln_f)  # [n_seq, n_embd] -> [n_seq, n_embd]
+    return x @ wte.T  # [n_seq, n_embd] -> [n_seq, n_vocab] -> RAW LOGITS for numerical stability, flexible usability AND non-redundant np.argmax
 
 
 def generate(inputs, params, n_head, n_tokens_to_generate):
