@@ -35,24 +35,43 @@ def attention(q, k, v, mask): # [n_q, d_k], [n_k, d_k], [n_k, d_v] -> [n_q, d_v]
     return softmax(q @ k.T / np.sqrt(q.shape[-1]) + mask) @ v
 
 
-def casual_self_attention(x, c_attn, c_proj):
-    x = linear(x, **c_attn) # q,k,v projections in single matrice for parallel compute, these are "attn_wts"
+# def casual_self_attention(x, c_attn, c_proj):
+#     x = linear(x, **c_attn) # q,k,v projections in single matrice for parallel compute, these are "attn_wts"
 
-    (q, k, v) = np.split(x, 3, axis=-1) # [n_seq, 3*n_embd] -> [n_seq, n_embd]
+#     (q, k, v) = np.split(x, 3, axis=-1) # [n_seq, 3*n_embd] -> [n_seq, n_embd]
+
+#     casaul_mask = (1 - np.tri(x.shape[0], dtype=x.dtype)) * -1e10
+
+#     # learn self-attn
+#     x = attention(q, k, v, casaul_mask)
+
+#     # out proj
+#     x = linear(x, **c_proj)  # [n_seq, n_embd] -> [n_seq, n_embd]
+
+#     return x
+
+
+def mha(x, c_attn, c_proj, n_head):
+    x = linear(x, **c_attn) # q,k,v projections in single contiguous matrice for parallel compute, these are "attn_wts"
+
+    # split on the last dim, into 3 parallel independent matrices
+    qkv = np.split(x, 3, axis=-1) # [n_seq, 3*n_embd] -> [3, n_seq, n_embd]
+
+    # split again for n_head parallel independent matrice, each is a "head"
+    qkv_heads = list(map(lambda x: np.split(x, n_head, axis=-1), qkv))  # [3, n_seq, n_embd] -> [3, n_head, n_seq, n_embd/n_head]
 
     casaul_mask = (1 - np.tri(x.shape[0], dtype=x.dtype)) * -1e10
 
-    # learn self-attn
-    x = attention(q, k, v, casaul_mask)
+    # zip because want attn between each independent qi,ki,vi heads where i is n_heads
+    out_heads = [attention(q, k, v, casaul_mask) for q, k, v in zip(*qkv_heads)] # [3, n_head, n_seq, n_embd/n_head] -> [n_head, n_seq, n_embd/n_head]
+
+    # merge heads, previously stacked by row, now squash back into contiguous 
+    x = np.hstack(out_heads) # [n_head, n_seq, n_embd/n_head] -> [n_seq, n_embd]
 
     # out proj
     x = linear(x, **c_proj)  # [n_seq, n_embd] -> [n_seq, n_embd]
 
     return x
-
-
-def mha(x, c_attn, n_head):
-    pass
 
 
 def transformer_block(x, mlp, attn, ln_1, ln_2, n_head):
